@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PLANTPAL - ชุมชนคนรักต้นไม้</title>
+
+    <!-- Libraries CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+    <!-- Google Fonts: Kanit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+    <!-- Custom CSS -->
+    <style>
+        :root {
+            --primary-green: #2a9d8f;
+            --secondary-blue: #264653;
+            --accent-yellow: #f4a261;
+            --light-bg: #f0f7f6;
+            --danger-color: #e76f51;
+        }
+
+        body {
+            font-family: 'Kanit', sans-serif;
+            background-color: var(--light-bg);
+        }
+
+        .navbar {
+            background-color: var(--primary-green);
+            box-shadow: 0 4px 6px rgba(0,0,0,.1);
+        }
+
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,.08);
+            transition: transform .2s ease-in-out, box-shadow .2s ease-in-out;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 16px rgba(0,0,0,.12);
+        }
+
+        .nav-pills .nav-link {
+            color: var(--secondary-blue);
+            font-weight: 500;
+        }
+        .nav-pills .nav-link.active {
+            background-color: var(--primary-green);
+            box-shadow: 0 2px 4px rgba(42, 157, 143, 0.4);
+        }
+
+        #loading-indicator {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1060;
+        }
+        
+        /* Share Card Style */
+        #share-card-content {
+            background: linear-gradient(135deg, #e9f5f3, #d4e9e7);
+            border: 8px solid white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        #share-card-content .badge {
+            background-color: var(--primary-green);
+        }
+
+        /* Map & Modals */
+        #map { height: 300px; border-radius: 8px; }
+        #main-map-view { height: 65vh; width: 100%; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+    </style>
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top">
+        <div class="container">
+            <a class="navbar-brand" href="#"><i class="bi bi-tree-fill"></i> PLANTPAL</a>
+            <div id="user-info" class="d-flex align-items-center d-none">
+                <span class="navbar-text text-white me-3">
+                    <i class="bi bi-award-fill text-warning"></i> แต้มเขียว: <strong id="green-points">0</strong>
+                </span>
+                <span id="user-email" class="navbar-text me-3 d-none d-sm-inline"></span>
+                <button id="logout-button" class="btn btn-outline-light"><i class="bi bi-box-arrow-right"></i> ออก</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container mt-4">
+
+        <div id="loading-indicator" class="d-none"><div class="spinner-border text-success" role="status"></div></div>
+
+        <!-- Auth Section -->
+        <div id="auth-section">
+            <div class="row justify-content-center"><div class="col-lg-6">
+                <div id="login-container" class="form-container"><h2 class="text-center mb-4">เข้าสู่ระบบ PLANTPAL</h2><form id="login-form"><div class="mb-3"><label for="login-email" class="form-label">อีเมล</label><input type="email" class="form-control" id="login-email" required></div><div class="mb-3"><label for="login-password" class="form-label">รหัสผ่าน</label><input type="password" class="form-control" id="login-password" required></div><button type="submit" class="btn btn-primary w-100"><i class="bi bi-box-arrow-in-right"></i> เข้าสู่ระบบ</button></form><p class="text-center mt-3">ยังไม่มีบัญชี? <a href="#" id="show-register">สมัครสมาชิก</a></p></div>
+                <div id="register-container" class="form-container d-none"><h2 class="text-center mb-4">สร้างบัญชีใหม่</h2><form id="register-form"><div class="mb-3"><label for="register-email" class="form-label">อีเมล</label><input type="email" class="form-control" id="register-email" required></div><div class="mb-3"><label for="register-password" class="form-label">รหัสผ่าน</label><input type="password" class="form-control" id="register-password" required></div><button type="submit" class="btn btn-primary w-100"><i class="bi bi-person-plus-fill"></i> สมัครสมาชิก</button></form><p class="text-center mt-3">มีบัญชีแล้ว? <a href="#" id="show-login">เข้าสู่ระบบ</a></p></div>
+            </div></div>
+        </div>
+
+        <!-- App Section (Logged In) -->
+        <div id="app-section" class="d-none">
+            
+            <!-- Promotions & Daily Reward -->
+            <div class="row">
+                <div class="col-md-7">
+                    <div class="card promo-card bg-success text-white mb-3">
+                        <div class="card-body">
+                            <h4 class="card-title"><i class="bi bi-calendar-heart"></i> กิจกรรมพิเศษ!</h4>
+                            <p id="promo-text" class="card-text">สิงหาคมนี้ บอกรักแม่ด้วยการปลูกต้นมะลิ รับแต้มเขียว x2 ทันที!</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <div class="card mb-3">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">รางวัลประจำวัน</h5>
+                            <p class="card-text">กดรับแต้มเขียวฟรีทุกวัน!</p>
+                            <button id="daily-reward-btn" class="btn btn-warning"><i class="bi bi-gift-fill"></i> กดรับ +5 แต้ม</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main App Tabs -->
+            <ul class="nav nav-pills nav-fill mb-4" id="app-tabs" role="tablist">
+              <li class="nav-item" role="presentation"><button class="nav-link active" id="my-trees-tab" data-bs-toggle="tab" data-bs-target="#my-trees-panel" type="button"><i class="bi bi-tree"></i> ต้นไม้ของฉัน</button></li>
+              <li class="nav-item" role="presentation"><button class="nav-link" id="community-tab" data-bs-toggle="tab" data-bs-target="#community-panel" type="button"><i class="bi bi-globe-americas"></i> ชุมชน</button></li>
+              <li class="nav-item" role="presentation"><button class="nav-link" id="gift-tab" data-bs-toggle="tab" data-bs-target="#gift-panel" type="button"><i class="bi bi-gift"></i> ส่งของขวัญ</button></li>
+            </ul>
+
+            <div class="tab-content" id="app-tabs-content">
+              <!-- My Trees Panel -->
+              <div class="tab-pane fade show active" id="my-trees-panel" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-4 mb-4">
+                        <div class="card">
+                            <div class="card-header"><h5 class="mb-0"><i class="bi bi-plus-circle-fill"></i> ฝากปลูกต้นไม้ใหม่</h5></div>
+                            <div class="card-body"><form id="add-tree-form"><div class="mb-3"><label for="tree-name" class="form-label">ชนิดต้นไม้</label><select class="form-select" id="tree-name" required><option value="สัก">สัก</option><option value="มะม่วง">มะม่วง</option><option value="ยางนา">ยางนา</option><option value="พะยูง">พะยูง</option><option value="ราชพฤกษ์">ราชพฤกษ์</option><option value="อินทนิล">อินทนิล</option><option value="ชมพูพันธุ์ทิพย์">ชมพูพันธุ์ทิพย์</option><option value="มะลิ">มะลิ (โปรโมชัน)</option></select></div><div class="mb-3"><label for="tree-location" class="form-label">พื้นที่ปลูก</label><select class="form-select" id="tree-location" required><option value="เชียงใหม่" data-lat="18.7877" data-lng="98.9931">เชียงใหม่</option><option value="น่าน" data-lat="18.7745" data-lng="100.7725">น่าน</option><option value="เลย" data-lat="17.4860" data-lng="101.7289">เลย</option><option value="กาญจนบุรี" data-lat="14.0496" data-lng="99.5309">กาญจนบุรี</option></select></div><div class="d-grid"><button type="submit" class="btn btn-primary"><i class="bi bi-credit-card-fill"></i> ฝากปลูก (500 บ.)</button></div></form></div>
+                        </div>
+                    </div>
+                    <div class="col-lg-8"><h3><i class="bi bi-collection-fill"></i> ต้นไม้ทั้งหมดของคุณ</h3><div id="tree-list" class="row"></div></div>
+                </div>
+              </div>
+              <!-- Community Feed Panel -->
+              <div class="tab-pane fade" id="community-panel" role="tabpanel">
+                <h3 class="mb-3"><i class="bi bi-activity"></i> เพื่อนๆ กำลังปลูกอะไรกันอยู่</h3>
+                <div id="community-feed-list" class="row"></div>
+              </div>
+              <!-- Gift a Tree Panel -->
+              <div class="tab-pane fade" id="gift-panel" role="tabpanel">
+                <div class="row justify-content-center"><div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <i class="bi bi-gift-fill" style="font-size: 4rem; color: var(--accent-yellow);"></i>
+                            <h3 class="mt-3">ส่งต้นไม้เป็นของขวัญ</h3>
+                            <p>มอบของขวัญที่มีความหมายและเติบโตได้ให้กับคนพิเศษของคุณ</p>
+                            <form id="gift-tree-form" class="text-start">
+                                <div class="mb-3"><label for="gift-recipient-email" class="form-label">อีเมลผู้รับ</label><input type="email" class="form-control" id="gift-recipient-email" required placeholder="friend@example.com"></div>
+                                <div class="mb-3"><label for="gift-tree-name" class="form-label">เลือกต้นไม้</label><select class="form-select" id="gift-tree-name" required><option value="สัก">สัก</option><option value="มะม่วง">มะม่วง</option><option value="ราชพฤกษ์">ราชพฤกษ์</option><option value="ชมพูพันธุ์ทิพย์">ชมพูพันธุ์ทิพย์</option></select></div>
+                                <div class="mb-3"><label for="gift-message" class="form-label">ข้อความอวยพร</label><textarea class="form-control" id="gift-message" rows="3" placeholder="ขอให้มีความสุขมากๆนะ!"></textarea></div>
+                                <div class="d-grid"><button type="submit" class="btn btn-primary"><i class="bi bi-send-check-fill"></i> ส่งของขวัญ (500 บ.)</button></div>
+                            </form>
+                        </div>
+                    </div>
+                </div></div>
+              </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modals -->
+    <div class="modal fade" id="paymentModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="payment-title">ยืนยันการชำระเงิน</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p>คุณกำลังจะชำระเงินค่า <strong id="payment-description"></strong></p><p class="h4 text-center">จำนวน: 500 บาท</p></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button><button type="button" id="confirm-payment-btn" class="btn btn-primary">ยืนยัน</button></div></div></div></div>
+    <div class="modal fade" id="treeDetailModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="treeDetailTitle"></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#timeline" type="button">ไทม์ไลน์</button></li><li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#chat" type="button">สื่อสาร</button></li></ul><div class="tab-content pt-3"><div class="tab-pane active" id="timeline" role="tabpanel"></div><div class="tab-pane" id="chat" role="tabpanel"><div class="chat-box" id="chat-box-messages"></div><form id="chat-form"><div class="input-group"><input type="text" id="chat-message-input" class="form-control" placeholder="พิมพ์ข้อความ..." required><button class="btn btn-primary" type="submit"><i class="bi bi-send-fill"></i></button></div></form></div></div></div></div></div></div>
+    <div class="modal fade" id="shareModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">แชร์ต้นไม้ของคุณ</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div id="share-card-content" class="p-3 rounded text-center"><h4 id="share-card-title"></h4><div id="share-card-qrcode" class="d-flex justify-content-center my-3"></div><p>ปลูกที่ <strong id="share-card-location"></strong></p><span class="badge" id="share-card-badge"></span></div><div class="input-group mt-3"><input type="text" id="share-link-input" class="form-control" value="https://plantpal.example.com/tree/123" readonly><button id="copy-share-link-btn" class="btn btn-outline-secondary"><i class="bi bi-clipboard"></i></button></div></div></div></div></div>
+    
+    <!-- JS Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getDatabase, ref, set, push, onValue, remove, update, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCZsB6qgjtBwLzG2Neo0_Ea_rOnuu5maZc",
+            authDomain: "green-zone-9ca7b.firebaseapp.com",
+            databaseURL: "https://green-zone-9ca7b-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "green-zone-9ca7b",
+            storageBucket: "green-zone-9ca7b.appspot.com",
+            messagingSenderId: "913881004537",
+            appId: "1:913881004537:web:750b5fd002fc24ea1ca528",
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
+
+        let currentUser = null;
+        let paymentContext = {};
+
+        const allUI = {
+            loading: document.getElementById('loading-indicator'),
+            auth: document.getElementById('auth-section'),
+            app: document.getElementById('app-section'),
+            login: { form: document.getElementById('login-form'), container: document.getElementById('login-container') },
+            register: { form: document.getElementById('register-form'), container: document.getElementById('register-container') },
+            showLogin: document.getElementById('show-login'),
+            showRegister: document.getElementById('show-register'),
+            userInfo: document.getElementById('user-info'),
+            userEmail: document.getElementById('user-email'),
+            greenPoints: document.getElementById('green-points'),
+            logoutBtn: document.getElementById('logout-button'),
+            addTreeForm: document.getElementById('add-tree-form'),
+            treeList: document.getElementById('tree-list'),
+            communityFeed: document.getElementById('community-feed-list'),
+            giftForm: document.getElementById('gift-tree-form'),
+            dailyRewardBtn: document.getElementById('daily-reward-btn'),
+            payment: {
+                modal: new bootstrap.Modal(document.getElementById('paymentModal')),
+                title: document.getElementById('payment-title'),
+                description: document.getElementById('payment-description'),
+                confirmBtn: document.getElementById('confirm-payment-btn')
+            },
+            share: {
+                modal: new bootstrap.Modal(document.getElementById('shareModal')),
+                title: document.getElementById('share-card-title'),
+                qrcode: document.getElementById('share-card-qrcode'),
+                location: document.getElementById('share-card-location'),
+                badge: document.getElementById('share-card-badge'),
+                linkInput: document.getElementById('share-link-input'),
+                copyBtn: document.getElementById('copy-share-link-btn')
+            }
+        };
+
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            if (user) {
+                allUI.userEmail.textContent = user.email;
+                allUI.auth.classList.add('d-none');
+                allUI.app.classList.remove('d-none');
+                allUI.userInfo.classList.remove('d-none');
+                listenToUserData();
+                listenToCommunityFeed();
+                checkDailyReward();
+            } else {
+                allUI.auth.classList.remove('d-none');
+                allUI.app.classList.add('d-none');
+                allUI.userInfo.classList.add('d-none');
+            }
+        });
+
+        allUI.login.form.addEventListener('submit', (e) => { e.preventDefault(); signInWithEmailAndPassword(auth, allUI.login.form['login-email'].value, allUI.login.form['login-password'].value).catch(err => alert(err.message)); });
+        allUI.register.form.addEventListener('submit', (e) => { e.preventDefault(); createUserWithEmailAndPassword(auth, allUI.register.form['register-email'].value, allUI.register.form['register-password'].value).catch(err => alert(err.message)); });
+        allUI.logoutBtn.addEventListener('click', () => signOut(auth));
+        allUI.showRegister.addEventListener('click', (e) => { e.preventDefault(); allUI.login.container.classList.add('d-none'); allUI.register.container.classList.remove('d-none'); });
+        allUI.showLogin.addEventListener('click', (e) => { e.preventDefault(); allUI.register.container.classList.add('d-none'); allUI.login.container.classList.remove('d-none'); });
+
+        function listenToUserData() {
+            const userRef = ref(db, 'users/' + currentUser.uid);
+            onValue(userRef, (snapshot) => {
+                const userData = snapshot.val() || { points: 0, trees: {} };
+                allUI.greenPoints.textContent = userData.points;
+                renderMyTrees(userData.trees);
+            });
+        }
+
+        function listenToCommunityFeed() {
+            const feedRef = ref(db, 'community_feed');
+            onValue(feedRef, (snapshot) => {
+                const feedData = snapshot.val() || {};
+                allUI.communityFeed.innerHTML = '';
+                Object.values(feedData).sort((a, b) => b.timestamp - a.timestamp).slice(0, 12).forEach(item => {
+                    const date = new Date(item.timestamp).toLocaleDateString('th-TH');
+                    const card = document.createElement('div');
+                    card.className = 'col-md-6 col-lg-4 mb-4';
+                    card.innerHTML = `
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="bi bi-tree text-success"></i> ${item.treeName}</h5>
+                                <p class="card-text mb-1"><strong><i class="bi bi-person-circle"></i> ผู้ปลูก:</strong> ${item.ownerEmail.split('@')[0]}</p>
+                                <p class="card-text"><strong><i class="bi bi-geo-alt-fill text-danger"></i> พื้นที่:</strong> ${item.location}</p>
+                                <p class="card-text"><small class="text-muted">${date}</small></p>
+                            </div>
+                        </div>`;
+                    allUI.communityFeed.appendChild(card);
+                });
+            });
+        }
+
+        function renderMyTrees(trees) {
+            allUI.treeList.innerHTML = '';
+            if (!trees) {
+                allUI.treeList.innerHTML = '<p class="text-muted">ยังไม่มีต้นไม้ ลองเพิ่มต้นแรกของคุณดูสิ!</p>';
+                return;
+            }
+            Object.entries(trees).forEach(([key, tree]) => {
+                const card = document.createElement('div');
+                card.className = 'col-md-6 col-lg-4 mb-4';
+                card.innerHTML = `
+                    <div class="card h-100">
+                        <div class="card-body d-flex flex-column">
+                            <h5 class="card-title"><i class="bi bi-tree text-success"></i> ${tree.name}</h5>
+                            <p class="card-text"><i class="bi bi-geo-alt-fill text-danger"></i> ${tree.location}</p>
+                            <div class="mt-auto">
+                               <button class="btn btn-sm btn-info share-btn" data-id="${key}"><i class="bi bi-share-fill"></i> แชร์</button>
+                               <button class="btn btn-sm btn-outline-danger delete-btn" data-id="${key}"><i class="bi bi-trash"></i> ลบ</button>
+                            </div>
+                        </div>
+                    </div>`;
+                allUI.treeList.appendChild(card);
+            });
+        }
+        
+        allUI.addTreeForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            paymentContext = { type: 'plant', form: allUI.addTreeForm };
+            allUI.payment.title.textContent = 'ยืนยันการฝากปลูก';
+            allUI.payment.description.textContent = `ฝากปลูกต้น${allUI.addTreeForm['tree-name'].value}`;
+            allUI.payment.modal.show();
+        });
+
+        allUI.giftForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            paymentContext = { type: 'gift', form: allUI.giftForm };
+            allUI.payment.title.textContent = 'ยืนยันการส่งของขวัญ';
+            allUI.payment.description.textContent = `ส่งต้น${allUI.giftForm['gift-tree-name'].value} เป็นของขวัญ`;
+            allUI.payment.modal.show();
+        });
+
+        allUI.payment.confirmBtn.addEventListener('click', () => {
+            if (paymentContext.type === 'plant') {
+                const form = paymentContext.form;
+                const treeName = form['tree-name'].value;
+                const locationName = form['tree-location'].value;
+                
+                const newTreeRef = push(ref(db, `users/${currentUser.uid}/trees`));
+                set(newTreeRef, createTreeObject(treeName, locationName, `ของขวัญสำหรับตัวเอง`));
+
+                const newFeedRef = push(ref(db, 'community_feed'));
+                set(newFeedRef, {
+                    treeName: treeName,
+                    location: locationName,
+                    ownerEmail: currentUser.email,
+                    timestamp: serverTimestamp()
+                });
+
+                update(ref(db, `users/${currentUser.uid}`), { points: (parseInt(allUI.greenPoints.textContent) || 0) + 10 });
+                form.reset();
+
+            } else if (paymentContext.type === 'gift') {
+                const form = paymentContext.form;
+                const recipientEmail = form['gift-recipient-email'].value;
+                const treeName = form['gift-tree-name'].value;
+                const message = form['gift-message'].value;
+
+                const newGiftRef = push(ref(db, 'gifts'));
+                set(newGiftRef, {
+                    recipientEmail: recipientEmail.toLowerCase(),
+                    senderEmail: currentUser.email,
+                    treeData: createTreeObject(treeName, "สวนของขวัญ", message, true, currentUser.email),
+                    status: 'pending'
+                });
+                alert(`ส่งของขวัญสำเร็จ!`);
+                form.reset();
+            }
+            allUI.payment.modal.hide();
+        });
+
+        function createTreeObject(name, location, message, isGift = false, sender = null) {
+            return {
+                name: name,
+                location: location,
+                plantedAt: new Date().toISOString(),
+                isGift: isGift,
+                senderEmail: sender,
+                giftMessage: message
+            };
+        }
+
+        allUI.treeList.addEventListener('click', (e) => {
+            const button = e.target.closest('button');
+            if (!button) return;
+            const treeId = button.dataset.id;
+
+            if (button.classList.contains('share-btn')) {
+                openShareModal(treeId);
+            }
+            if (button.classList.contains('delete-btn')) {
+                if (confirm('ต้องการลบต้นไม้นี้?')) remove(ref(db, `users/${currentUser.uid}/trees/${treeId}`));
+            }
+        });
+
+        function openShareModal(treeId) {
+            const treeRef = ref(db, `users/${currentUser.uid}/trees/${treeId}`);
+            onValue(treeRef, (snapshot) => {
+                const tree = snapshot.val();
+                if (!tree) return;
+                
+                const shareLink = `https://plantpal.example.com/tree/${treeId}`;
+                allUI.share.title.textContent = `ต้น${tree.name}ของฉัน`;
+                allUI.share.location.textContent = tree.location;
+                allUI.share.badge.textContent = `ปลูกโดย ${currentUser.email.split('@')[0]}`;
+                allUI.share.linkInput.value = shareLink;
+                allUI.share.qrcode.innerHTML = '';
+                new QRCode(allUI.share.qrcode, { text: shareLink, width: 128, height: 128 });
+
+                allUI.share.modal.show();
+            }, { onlyOnce: true });
+        }
+        
+        allUI.share.copyBtn.addEventListener('click', () => {
+            allUI.share.linkInput.select();
+            document.execCommand('copy');
+            allUI.share.copyBtn.innerHTML = '<i class="bi bi-check-lg"></i>';
+            setTimeout(() => { allUI.share.copyBtn.innerHTML = '<i class="bi bi-clipboard"></i>'; }, 2000);
+        });
+
+        function checkDailyReward() {
+            const lastClaim = localStorage.getItem('plantpal_daily_reward');
+            const today = new Date().toDateString();
+            if (lastClaim === today) {
+                allUI.dailyRewardBtn.disabled = true;
+                allUI.dailyRewardBtn.innerHTML = '<i class="bi bi-check-circle-fill"></i> รับแล้ววันนี้';
+            } else {
+                allUI.dailyRewardBtn.disabled = false;
+                allUI.dailyRewardBtn.innerHTML = '<i class="bi bi-gift-fill"></i> กดรับ +5 แต้ม';
+            }
+        }
+        allUI.dailyRewardBtn.addEventListener('click', () => {
+            const lastClaim = localStorage.getItem('plantpal_daily_reward');
+            const today = new Date().toDateString();
+            if (lastClaim !== today) {
+                const currentPoints = parseInt(allUI.greenPoints.textContent) || 0;
+                update(ref(db, `users/${currentUser.uid}`), { points: currentPoints + 5 });
+                localStorage.setItem('plantpal_daily_reward', today);
+                checkDailyReward();
+                alert('รับ 5 แต้มสำเร็จ!');
+            }
+        });
+    </script>
+</body>
+</html>
